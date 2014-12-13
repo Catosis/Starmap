@@ -1,0 +1,802 @@
+<!doctype html>
+<html lang="en">
+	<head>
+	<style type="text/css">
+
+	#text {
+		background-color:rgba(0,0,100,0.4);
+		color: #FFFFFF;
+		position: absolute;
+		font-family; "Arial";
+		top: 100px;
+		right: 0px;
+		width: 221px;
+		font: face
+		z-index:200;
+		text-align: center;
+		overflow:auto;
+	}
+	#image{
+		position: absolute;
+		bottom: 10px;
+		width:50px;
+		left: 30px;
+		opacity: .7;
+
+	}
+
+
+	</style>
+		<title>Sky Map - Second attempt</title>
+		<meta charset="utf-8">
+		<meta name="viewport" content="width=device-width, user-scalable=no, minimum-scale=1.0, maximum-scale=1.0">
+		<style>
+			body {
+				background-color: rgb(70,70,70);
+				margin: 0px;
+				overflow: hidden;
+			}
+
+			#info {
+				position: absolute;
+				top: 0px; width: 100%;
+				color: #ffffff;
+				padding: 5px;
+				font-family:Monospace;
+				font-size:13px;
+				font-weight: bold;
+				text-align:center;
+			}
+			#credit {
+				position: absolute;
+				bottom: 0px; width: 100%;
+				color: #ffffff;
+				padding: 5px;
+				font-family:Monospace;
+				font-size:10px;
+				opacity: .5;
+				text-align:right;
+			}
+
+		</style>
+		</head>
+	<body>
+
+		<div id="container"></div>
+		<div id="debug"></div>
+		<div id="text"></div>
+		<div id="info">Welcome to the Night Sky Map. Click the buttons to toggle and the mouse wheel to zoom in and out.</div>
+		<div id="credit">Information from www.topastronomer.com</div>
+
+		<script src="javascript/Three.js"></script>
+
+
+		<script>
+			///VARS
+			var camera, scene, renderer;
+			var isViewingMap="false";
+			var texture_placeholder,
+			isUserInteracting = false,
+			onMouseDownMouseX = 0, onMouseDownMouseY = 0,
+			lon = 90, onMouseDownLon = 0,
+			lat = 0, onMouseDownLat = 0,
+			phi = 0, theta = 0,
+			target = new THREE.Vector3();
+			var mesh, materials;//texure
+			var stats;
+			var projector, zoom=0;
+			var particleMaterial;
+			var info=[];
+			var objects = []; //will contain the clickable constellations
+
+
+			initMap();
+
+
+			function initMap() {
+					//toggle button
+			        var button = document.createElement( 'div' );
+			        button.style.position = 'absolute';
+			        button.style.right = '30px';
+			        button.style.top = '10px';
+			        button.style.textAlign = 'center';
+			        button.style.color = '#00';
+			        button.style.padding = '3px 3px 3px 3px';
+			        button.innerHTML = '<a href="javascript:toggle();"id="displayText"><img src="images/skybox/MapDull.png" width="50"></a>';
+			        this.container.appendChild( button);
+
+			        this.info = document.createElement( 'div' );
+			        this.info.style.position = 'absolute';
+			        //this.info.style.width = '220px';
+			        //this.info.style.right = '0px';
+			        //this.info.style.top = '70px';
+			        this.info.style.textAlign = 'center';
+			        this.info.style.backgroundColor = '#6DC4D2';
+			        this.info.style.color = '#ffffff';
+			        //this.info.style.padding = '3px 3px 3px 3px';
+			        this.info.innerHTML = '<div id="toggleText" style="display: none;"></div>';
+			        this.container.appendChild( this.info);
+
+			        //button for summoning the clickable objects
+					var clickyStars = document.createElement( 'div' );
+					clickyStars.style.position = 'absolute';
+					clickyStars.style.right = '90px';
+					clickyStars.style.top = '10px';
+					clickyStars.style.textAlign = 'center';
+					clickyStars.style.color = '#00';
+					clickyStars.style.padding = '3px 3px 3px 3px';
+					clickyStars.innerHTML = '<a href="javascript:toggleClickables();"id="displayClickables"><img src="images/skybox/InformationDull.png" width="50"></a>';
+					this.container.appendChild( clickyStars);
+
+					this.info = document.createElement( 'div' );
+					this.info.style.position = 'absolute';
+					this.info.style.textAlign = 'center';
+					this.info.style.backgroundColor = '#6DC4D2';
+					this.info.style.color = '#ffffff';
+					this.info.innerHTML = '<div id="toggleClickables" style="display: none;"></div>';
+			        this.container.appendChild( this.info);
+
+
+				var container;
+      			///////Opening Screen////
+				container = document.getElementById( 'container' );
+
+				camera = new THREE.PerspectiveCamera( 75, window.innerWidth / window.innerHeight, 1, 1100 );
+
+				scene = new THREE.Scene();
+
+				scene.add( camera );
+
+				texture_placeholder = document.createElement( 'canvas' );
+				texture_placeholder.width = 128;
+				texture_placeholder.height = 128;
+
+				var context = texture_placeholder.getContext( '2d' );
+				context.fillStyle = 'rgb( 200, 200, 200 )';
+				context.fillRect( 0, 0, texture_placeholder.width, texture_placeholder.height );
+
+				var materials = [
+
+					loadTexture( 'images/skybox/right.jpg' ), // right
+					loadTexture( 'images/skybox/left.jpg' ), // left
+					loadTexture( 'images/skybox/top1.jpg' ), // top
+					loadTexture( 'images/skybox/bottom.jpg' ), // bottom
+					loadTexture( 'images/skybox/front.jpg' ), // front
+					loadTexture( 'images/skybox/back.jpg' )  // back
+
+				];
+
+				mesh = new THREE.Mesh( new THREE.CubeGeometry( 300, 300, 300, 7, 7, 7, materials ), new THREE.MeshFaceMaterial() );
+				mesh.scale.x = - 1;
+				scene.add( mesh );
+
+				projector = new THREE.Projector();//for interaction, I think
+
+				renderer = new THREE.CanvasRenderer();
+				renderer.setSize( window.innerWidth, window.innerHeight );
+
+				container.appendChild( renderer.domElement );
+
+				document.addEventListener( 'mousedown', onDocumentMouseDown, false );
+				document.addEventListener( 'mousemove', onDocumentMouseMove, false );
+				document.addEventListener( 'mouseup', onDocumentMouseUp, false );
+				document.addEventListener( 'mousewheel', onDocumentMouseWheel, false );
+
+				document.addEventListener( 'touchstart', onDocumentTouchStart, false );
+				document.addEventListener( 'touchmove', onDocumentTouchMove, false );
+
+
+			}
+
+			function loadTexture( path ) {
+
+				var texture = new THREE.Texture( texture_placeholder );
+				var material = new THREE.MeshBasicMaterial( { map: texture, overdraw: true } );
+
+				var image = new Image();
+				image.onload = function () {
+
+					texture.needsUpdate = true;
+					material.map.image = this;
+
+					render();
+
+				};
+				image.src = path;
+
+				return material;
+
+			}
+
+
+
+			function onDocumentMouseDown( event ) {
+
+				event.preventDefault();
+				isUserInteracting = true;
+				onPointerDownPointerX = event.clientX;
+				onPointerDownPointerY = event.clientY;
+				onPointerDownLon = lon;
+				onPointerDownLat = lat;
+
+				var vector = new THREE.Vector3( ( event.clientX / window.innerWidth ) * 2 - 1, - ( event.clientY / window.innerHeight ) * 2 + 1, 0.5 );
+				projector.unprojectVector( vector, camera );
+
+				var ray = new THREE.Ray( camera.position, vector.subSelf( camera.position ).normalize() );
+
+				var intersects = ray.intersectObjects( objects );
+
+				if ( intersects.length > 0 ) {
+
+					intersects[ 0 ].object.material.color.setHex( Math.random() * 0xffffff );
+					intersects[ 0 ].object.innerHTML;
+					var theHTML=intersects[ 0 ].object.text;
+					document.getElementById('text').innerHTML= theHTML;
+
+;
+				}
+			}
+
+			function onDocumentMouseMove( event ) {
+
+
+				if ( isUserInteracting ) {
+
+					lon = ( onPointerDownPointerX - event.clientX ) * 0.1 + onPointerDownLon;
+					lat = ( event.clientY - onPointerDownPointerY ) * 0.1 + onPointerDownLat;
+					render();
+					debug+=" "+lon;
+
+				}
+			}
+
+			function onDocumentMouseUp( event ) {
+
+				isUserInteracting = false;
+				render();
+
+			}
+
+			function onDocumentMouseWheel( event ) //allows zooming, prevents it from going to far either way though
+			{
+
+				if(zoom>-5 && zoom<5)
+				{
+					if(event.wheelDeltaY>0)
+					{
+						zoom+=1;
+						camera.fov -= 120 * 0.05;
+					}
+					else if(event.wheelDeltaY<0)
+					{
+						zoom-=1;
+						camera.fov -= -120 * 0.05;
+					}
+					camera.updateProjectionMatrix();
+
+				}
+				else;
+
+				//allows zooming back in if all the way out and vice versa
+				if(event.wheelDeltaY>0 && zoom<=-5)
+						zoom+=1;
+				else if(event.wheelDeltaY<0 && zoom >= 5)
+						zoom-=1;
+				else;
+
+				render();
+
+			}
+
+
+			function onDocumentTouchStart( event ) {
+
+				if ( event.touches.length == 1 ) {
+
+					event.preventDefault();
+
+					onPointerDownPointerX = event.touches[ 0 ].pageX;
+					onPointerDownPointerY = event.touches[ 0 ].pageY;
+
+					onPointerDownLon = lon;
+					onPointerDownLat = lat;
+
+				}
+
+			}
+
+			function onDocumentTouchMove( event ) {
+
+				if ( event.touches.length == 1 ) {
+
+					event.preventDefault();
+
+					lon = ( onPointerDownPointerX - event.touches[0].pageX ) * 0.1 + onPointerDownLon;
+					lat = ( event.touches[0].pageY - onPointerDownPointerY ) * 0.1 + onPointerDownLat;
+					render();
+
+				}
+
+			}
+			function render() {
+
+					lat = Math.max( - 85, Math.min( 85, lat ) );
+					phi = ( 90 - lat ) * Math.PI / 180;
+					theta = lon * Math.PI / 180;
+
+					target.x = 500 * Math.sin( phi ) * Math.cos( theta );
+					target.y = 500 * Math.cos( phi );
+					target.z = 500 * Math.sin( phi ) * Math.sin( theta );
+
+					camera.lookAt( target );
+					document.getElementById("debug");
+
+
+					renderer.render( scene, camera );
+
+
+			}
+
+			//trying to get a toggle for the information
+			function toggle() {
+
+				var ele = document.getElementById("toggleText");
+				var text = document.getElementById("displayText");
+
+				//TOGGLE MAP OFF
+				if(ele.style.display == "block") {
+			    		ele.style.display = "none";
+					materials = [
+
+							loadTexture( '' ), // right
+							loadTexture( '' ), // left
+							loadTexture( '' ), // top
+							loadTexture( '' ), // bottom
+							loadTexture( '' ), // front
+							loadTexture( '' )  // back
+
+					];
+
+					mesh = new THREE.Mesh( new THREE.CubeGeometry( 300, 300, 300, 7, 7, 7, materials ), new THREE.MeshFaceMaterial() );
+					mesh.scale.x = -1;
+					materials = [
+
+						loadTexture( 'images/skybox/right.jpg' ), // right
+						loadTexture( 'images/skybox/left.jpg' ), // left
+						loadTexture( 'images/skybox/top1.jpg' ), // top
+						loadTexture( 'images/skybox/bottom.jpg' ), // bottom
+						loadTexture( 'images/skybox/front.jpg' ), // front
+						loadTexture( 'images/skybox/back.jpg' )  // back
+
+					];
+
+					mesh = new THREE.Mesh( new THREE.CubeGeometry( 300, 300, 300, 7, 7, 7, materials ), new THREE.MeshFaceMaterial() );
+					mesh.scale.x = -1;
+					scene.add( mesh );
+					/*var geometry = new THREE.CubeGeometry( 100, 100, .5 );
+					var zomg = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.5 } ) );
+					var object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.5 } ) );
+					object.position.x = 110;
+					object.position.y = 100;
+					object.position.z = 150; //closeness to camera, -149, 149
+
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+
+					scene.add( object );
+					objects.push( object );*/
+
+					text.innerHTML = '<img src="images/skybox/MapDull.png" width="50">';
+
+				}
+				//TOGGLE MAP ON
+				else {
+					isViewingMap="false"; ele.style.display = "block"; text.innerHTML = '<img src="images/skybox/Map.jpg" width="50">';
+					materials = [
+
+							loadTexture( '' ), // right
+							loadTexture( '' ), // left
+							loadTexture( '' ), // top
+							loadTexture( '' ), // bottom
+							loadTexture( '' ), // front
+							loadTexture( '' )  // back
+
+					];
+
+					mesh = new THREE.Mesh( new THREE.CubeGeometry( 300, 300, 300, 7, 7, 7, materials ), new THREE.MeshFaceMaterial() );
+					mesh.scale.x = -1;
+					materials = [
+
+							loadTexture( 'images/skybox/rightMap.jpg' ), // right
+							loadTexture( 'images/skybox/leftMap.jpg' ), // left
+							loadTexture( 'images/skybox/topMap1.jpg' ), // top
+							loadTexture( 'images/skybox/bottomMap.jpg' ), // bottom
+							loadTexture( 'images/skybox/frontMap1.jpg' ), // front
+							loadTexture( 'images/skybox/backMap.jpg' )  // back
+
+					];
+
+						mesh = new THREE.Mesh( new THREE.CubeGeometry( 300, 300, 300, 7, 7, 7, materials ), new THREE.MeshFaceMaterial() );
+						mesh.scale.x = -1;
+						scene.add( mesh );
+
+
+				}
+
+
+			}
+
+			///HAPPY HAPPY FUN FUN BOXES
+			function toggleClickables() {
+
+				var ele = document.getElementById("toggleClickables");
+				var text = document.getElementById("displayClickables");
+
+				//TOGGLE CLICKABLE CONSTELLATIONS OFF
+				if(ele.style.display == "block") {
+					ele.style.display = "none";
+					//ele.style.display = "block";
+					text.innerHTML = '<img src="images/skybox/InformationDull.png" width="50">';
+
+					for(var i=0; i<objects.length; i++)
+					{
+						var objext=objects[i];
+						scene.remove(objext);
+					}
+					document.getElementById('text').innerHTML="";
+				}
+				//TOGGLE CLICKABLES ON
+				else {
+					ele.style.display = "block";
+					text.innerHTML = '<img src="images/skybox/Information.png" width="50">';
+
+					//ADDING ALL THE CONSTELLATIONS
+
+					//z on front and back
+
+					//FRONT CONSTELATIONS
+					//Capricorn
+					var geometry = new THREE.CubeGeometry( 40, 30, 0.5 );
+					var object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -40; //left right
+					object.position.y = -60; //up down
+					object.position.z = 145; //front to back, -149, 149
+
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Capricorn</b><br>Capricornus represents a sea-goat, a mythical creature that is half goat, half fish. Its name means "horned male goat" or "goat horn" in Latin. Like other zodiac constellations, Capricornus was first charted by the Greek astronomer Ptolemy in the 2nd century.<br>The constellation Capricornus occupies an area of 414 square degrees and contains two stars with known planets. It can be seen at latitudes between +60 and -90 and is best visible at 9 p.m. during the month of September.<br>It is the second faintist constellation after Cancer';
+					scene.add( object );
+					objects.push( object );
+
+					//Pegasus
+					var geometry = new THREE.CubeGeometry( 80, 50, 0.5 );
+					var object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 80; //left right
+					object.position.y = 60; //up down
+					object.position.z = 145; //front to back, -149, 149
+
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Pegasus</b><br> Pegasus is the seventh largest constellation in the sky. It was named after the mythological winged horse and introduced by the Greek astronomer Ptolemy in the 2nd century. <br>In Greek mythology, Pegasus leapt from the body of the Medusa when Perseus decapitated her. It was tamed by the hero Bellerophon, son of the Corinthian king Glaucus and grandson of Sisyphus.<br>';
+
+
+					scene.add( object );
+					objects.push( object );
+
+					//Aquila
+					var geometry = new THREE.CubeGeometry( 40, 50, 0.5 );
+					var object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -100; //left right
+					object.position.y = 10; //up down
+					object.position.z = 145; //front to back, -149, 149
+
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Aquila the Eagle</b> <br> Aquila is identified with the Greek myth of the battle between the Olympian gods and the Titans, in which the eagle carried Zeus\' thunderbolts that helped defeat the Titans. Once victorious, Zeus kept the eagle at his side at all times.';
+					scene.add( object );
+					objects.push( object );
+
+					//Cygnus
+					var geometry = new THREE.CubeGeometry( 40, 50, 0.5 );
+					var object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -45; //left right
+					object.position.y = 80; //up down
+					object.position.z = 145; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Cygnus</b><br>Its name derives from the Greek word for \"swan.\" The constellation was originally listed by the Greek astronomer Ptolemy in the 2nd century. It is shown as a long-necked bird with its wings spread wide. The constellation Cygnus is associated with several different myths. Orpheus, the musician and poet, was said to have been transformed into a swan after his death and placed in the sky next to his lyre, represented by the constellation Lyra. In another tale, Zeus transformed himself into a swan to seduce Leda, wife of King Tyndareus of Sparta, who later gave birth to Castor, Pollux, Helen (of Troy) and Clytemnestra.<br>The constellation Cygnus occupies an area of 804 square degrees and contains six stars with known planets. It can be seen at latitudes between +90 and -40 and is best visible at 9 p.m. during the month of September. ';
+					scene.add( object );
+					objects.push( object );
+
+
+					//LEFT
+					//Orion
+					geometry = new THREE.CubeGeometry( .5, 70, 55 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 130; //left right
+					object.position.y = 0; //up down;
+					object.position.z = -65; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Orion</b><br>In Greek mythology, Orion was a hunter, son of the sea god Poseidon and the Cretan princess Euryale.  The constellation Orion is depicted as a man raising his club and shield, facing the charge of a bull, represented by the neighbouring constellation Taurus(not shown, but contains the Peliades and Hyades), and standing next to the river Eridanus. The tale that corresponds to this representation is not found in Greek mythology, however, but Sumerian one. <br>Orion\'s belt is from this constellations is one of the most famous star clusters.<br>The constellation Orion occupies an area of 594 square degrees and contains three stars with known planets. It can be seen at latitudes between +85 and -75 and is best visible at 9 p.m. during the month of January.';
+					scene.add( object );
+					objects.push( object );
+
+					//Eridanus
+					geometry = new THREE.CubeGeometry( .5, 40, 60 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 130; //left right
+					object.position.y = -50; //up down;
+					object.position.z = 5; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Eridanus</b><br>The River';
+					scene.add( object );
+					objects.push( object );
+
+					//Cetus
+					geometry = new THREE.CubeGeometry( .5, 30, 40 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 130; //left right
+					object.position.y = -20; //up down;
+					object.position.z = 60; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Cetus</b><br>It\'s a whale';
+					scene.add( object );
+					objects.push( object );
+
+					//Perseus
+					geometry = new THREE.CubeGeometry( .5, 50, 40 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 130; //left right
+					object.position.y = 90; //up down;
+					object.position.z = 15; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Perseus</b><br>The Greek hero that defeated the monster Medusa, which in turn spawned the horse Hercules.';
+					scene.add( object );
+					objects.push( object );
+
+					//Canis Major
+					geometry = new THREE.CubeGeometry( .5, 50, 42 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 140; //left right
+					object.position.y = -60; //up down;
+					object.position.z = -117; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Canis Major</b><br>One of Hercules\' dogs.';
+					scene.add( object );
+					objects.push( object );
+
+					//BACK
+					//Hydra
+					geometry = new THREE.CubeGeometry( 80, 25, .5 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -20; //left right
+					object.position.y = -30; //up down;
+					object.position.z = -140; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Hydra</b><br>Greek monster that had many heads that grew bvack every time one was cut off. One of Hercules\'s twelve labors included killing it, which he did by having his friend cauterize each stump so the new head couldn\'t grow back.';
+					scene.add( object );
+					objects.push( object );
+
+					//Cancer
+					geometry = new THREE.CubeGeometry( 30, 45, .5 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 55; //left right
+					object.position.y = 35; //up down;
+					object.position.z = -140; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Cancer, the Crab</b><br>The Crab, and part of the Zodiac for people born in July 16th to August 21st';
+					scene.add( object );
+					objects.push( object );
+
+					//Gemini
+					geometry = new THREE.CubeGeometry( 45, 25, .5 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 110; //left right
+					object.position.y = 48; //up down;
+					object.position.z = -140; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Gemini, the Twins</b><br>Part of the Zodiac, for people born through May 22nd to Jun 23rd. <br>In Greek mythology, Zeus visited Queen Leda of Sparta, wife of King Tyndareus, in the form of a swan, represented by the constellation Cygnus. Leda became pregnant with both the god and her mortal husband and gave birth to four children. Polydeuces and Helen were fathered by Zeus and hence immortal, and Castor and Clytemnestra were children of Tyndareus and mortal. Castor and Polydeuces grew up inseparable and were part of many tales, including the myth of the Golden Fleece. When they clashed with another pair of brothers over two beautiful women, Castor, the mortal twin, was killed. Polydeuces asked Zeus not to be separated from his brother and Zeus allowed the two to spend half of the time at Olympus and half in Hades.';
+					scene.add( object );
+					objects.push( object );
+
+					//Puppis
+					geometry = new THREE.CubeGeometry( 35, 50, .5 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 80; //left right
+					object.position.y = -90; //up down;
+					object.position.z = -140; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Puppis, the Poop Deck.<br> I\'m not kidding.</b><br>Puppis was originally part of the much larger constellation Argo Navis, which represented the ship on which Jason and the Argonauts sailed home after stealing the Golden Fleece. Argo Navis was split into three smaller constellations that represent individual parts of the ship: Puppis (the stern), Carina (the keel and hull) and Vela (the sails). Puppis is the largest of the three.';
+					scene.add( object );
+					objects.push( object );
+
+					//Ursa Major
+					geometry = new THREE.CubeGeometry( 85, 35, .5 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -80; //left right
+					object.position.y = 100; //up down;
+					object.position.z = -140; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Ursa Major</b><br>Ursa Major is one of the oldest and most widely recognized constellations in the sky. It holds significance in many cultures, many of which identify it with a bear. The constellation was listed by the Greek astronomer Ptolemy in the 2nd century. Before Ptolemy, it was mentioned in such ancient texts as the works of Homer and the Bible.';
+					scene.add( object );
+					objects.push( object );
+
+					//RIGHT
+					//Hercules
+					geometry = new THREE.CubeGeometry( .5, 40, 45 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -140; //left right
+					object.position.y = 55; //up down;
+					object.position.z = 35; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Hercules</b><br>The myth of Heracles is a long and complex one. As an infant, he drunk the milk of the goddess Hera and became immortal. He was the biggest and strongest of all men, but suffered greatly at the hands of Hera who had swore to make his life hard. Under her spell, he killed his own children. Realizing what he had done, he visited the Oracle at Delphi and was told that, to atone for his act, he had to serve Eurysteus, king of Mycenae, for 12 years. <br>Eurysteus gave Heracles a number of tasks to accomplish, known as the Labours of Heracles. These included killing the Nemean lion and the Lernaean Hydra, stealing the Girdle of Hippolyte and the Apples of Hesperides, and capturing the Ceryneian Hind, the Erymanthian Boar and Cerberus, the multi-headed hound that guarded the entrance to Hades.<br> Hercules suffered a tragic fate in the end, being poisoned by his wife Deianeira, who was deceived by the centaur Nessus into believing that his blood could be used as a love potion.';
+					scene.add( object );
+					objects.push( object );
+
+					//Bootes
+					geometry = new THREE.CubeGeometry( .5, 50, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -140; //left right
+					object.position.y = 55; //up down;
+					object.position.z = -60; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Bootes the Herdsman</b><br>Bootes is usually visualized as a herdsman holding a staff and two dogs on a leash, chasing Ursa Major around the pole.<br>The Bootes constellation occupies an area of 907 square degrees and contains four stars with known planets. It can be seen at latitudes between +90 and -50 and is best visible at 9 p.m. during the month of June.';
+					scene.add( object );
+					objects.push( object );
+
+					//Libra
+					geometry = new THREE.CubeGeometry( .5, 35, 40 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -140; //left right
+					object.position.y = -45; //up down;
+					object.position.z = -45; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Libra</b><br>Part of the zodiac, from September 23rd to October 23rd.<br>Its name means \"weighing scales\" in Latin. Ancient Sumerians called the constellation Zib-ba An-na, meaning \"the balance of heaven.\"<br>The Libra constellation occupies an area of 538 square degrees and contains three stars with known planets. It can be seen at latitudes between +65 and -90 and is best visible at 9 p.m. during the month of June.';
+					scene.add( object );
+					objects.push( object );
+
+					//Centaurus
+					geometry = new THREE.CubeGeometry( .5, 50, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -140; //left right
+					object.position.y = -95; //up down;
+					object.position.z = -80; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Centaurus</b><br>';
+					scene.add( object );
+					objects.push( object );
+
+
+					//Scorpio
+					geometry = new THREE.CubeGeometry( .5, 50, 85 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -140; //left right
+					object.position.y = -70; //up down;
+					object.position.z = 30; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Scorpius the Scorpion</b><br>Part of the zodiac, from November 16th to Decemeber 16th. <br>Scorpius represents the scorpion that stung and killed Orion, the mythical hunter who boasted that he could kill any wild animal. The Earth sent the scorpion to kill Orion after hearing what he had said.';
+					scene.add( object );
+					objects.push( object );
+
+					//TOP
+
+					//Andromeda
+					geometry = new THREE.CubeGeometry( 70, .5, 70 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -75; //left right
+					object.position.y = 140; //up down;
+					object.position.z = 100; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Andromeda</b><br> The constellation has also often been referred to as the \"Chained Maiden\". In Greek mythology, Andromeda was chained to a rock and left to the monster Cetus to appease the gods before being rescued by Perseus.<br>The Andromeda constellation occupies an area of 722 square degrees and contains four stars with known planets. It can be seen at latitudes between +90 and -40 and is best visible at 9 p.m. during the month of November. ';
+					scene.add( object );
+					objects.push( object );
+
+					//Draco
+					geometry = new THREE.CubeGeometry( 80, .5, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 90; //left right
+					object.position.y = 140; //up down;
+					object.position.z = -20; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Draco</b><br>Malfoy<br>In Greek mythology, the constellation Draco was identified with the dragon Ladon, which had a hundred heads and was in charge of guarding the Garden of the Hesperides, the orchard of the goddess Hera where golden apples that gave immortality grew. When Hercules was given the task to steal the apples, he enchanted Ladon with music and put him to sleep before stealing the apples.<Br>The constellation Draco occupies an area of 1083 square degrees and contains five stars with known planets. It can be seen at latitudes between +90 and -15 and is best visible at 9 p.m. during the month of July. For many observers in the northern hemisphere, Draco never sets below the horizon.';
+					scene.add( object );
+					objects.push( object );
+
+
+					//Cepheus
+					geometry = new THREE.CubeGeometry( 60, .5, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 0; //left right
+					object.position.y = 140; //up down;
+					object.position.z = -50; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Cepheus</b><br>';
+					scene.add( object );
+					objects.push( object );
+
+					//Cassiopeia
+					geometry = new THREE.CubeGeometry( 30, .5, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = -90; //left right
+					object.position.y = 140; //up down;
+					object.position.z = -50; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Cassiopeia</b><br>Cepheus, also known as the King, is a constellation in the northern hemisphere, named after the mythical King Cepheus of Ethiopia (or Joppa), husband of Cassiopeia and father of Andromeda.<br>The constellation Cepheus occupies an area of 588 square degrees and contains one star with known planets. It can be seen at latitudes between +90 and -10 and is best visible at 9 p.m. during the month of November.';
+					scene.add( object );
+					objects.push( object );
+
+					//bottom
+					//Carina
+					geometry = new THREE.CubeGeometry( 100, .5, 50 );
+					object = new THREE.Mesh( geometry, new THREE.MeshBasicMaterial( { color: Math.random() * 0xffffff, opacity: 0.4 } ) );
+					object.position.x = 30; //left right
+					object.position.y = -140; //up down;
+					object.position.z = -90; //front to back, -149, 149
+					object.scale.x = 1;
+					object.scale.y = 1;
+					object.scale.z = 1;
+					object.text='<b>Carina</b><br>Carina is a constellation in the southern hemisphere. Its name means \"keel\" in Latin. Carina used to be a part of the constellation Argo Navis ("the ship Argo"), created by the Greek astronomer Ptolemy in the 2nd century, before Argo Navis was divided into three constellations ';
+					scene.add( object );
+					objects.push( object );
+
+
+
+
+
+
+
+
+				}
+			}
+
+		</script>
+
+	</body>
+</html>
+
+//jeez what are you looking down here for?
+//insult generator
+//rainbow bubblewrap
